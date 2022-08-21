@@ -5,6 +5,7 @@ import Control.Monad (forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
 import Data.Maybe (fromMaybe)
+import Data.Default (def)
 
 import Snake
 
@@ -62,8 +63,8 @@ main = do
     threadDelay 100000 -- decides how fast your game moves
 
   -- initial Game instance 
-  g <- initGame
-
+  g <- initGame def
+  
   let builder = V.mkVty V.defaultConfig
   initialVty <- builder
   void $ customMain initialVty builder (Just chan) app g
@@ -83,7 +84,7 @@ handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = continue $ turn South g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue $ turn East g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'h') [])) = continue $ turn West g
 -- reset game 
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO initGame >>= continue
+handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
 -- quit game
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt g
 handleEvent g (VtyEvent (V.EvKey V.KEsc []))        = halt g
@@ -93,7 +94,8 @@ handleEvent g _                                     = continue g
 
 drawUI :: Game -> [Widget Name]
 drawUI g =
-  [ C.center $ padRight (Pad 2) (drawStats g) <+> drawGrid g ]
+  let r = def in
+  [ C.center $ padRight (Pad 2) (drawStats g) <+> drawGrid g r ]
 
 drawStats :: Game -> Widget Name
 drawStats g = hLimit 11
@@ -114,13 +116,15 @@ drawGameOver dead =
      then withAttr gameOverAttr $ C.hCenter $ str "GAME OVER"
      else emptyWidget
 
-drawGrid :: Game -> Widget Name
-drawGrid g = withBorderStyle BS.unicodeBold
+drawGrid :: Game -> Config -> Widget Name
+drawGrid g r = withBorderStyle BS.unicodeBold
   $ B.borderWithLabel (str "Snake")
   $ vBox rows
   where
-    rows         = [hBox $ cellsInRow r | r <- [height-1,height-2..0]]
-    cellsInRow y = [drawCoord (V2 x y) | x <- [0..width-1]]
+    h = r ^. height
+    w = r ^. width 
+    rows         = [hBox $ cellsInRow r | r <- [h-1,h-2..0]]
+    cellsInRow y = [drawCoord (V2 x y) | x <- [0..w-1]]
     drawCoord    = drawCell . cellAt
     cellAt c
       | c `elem` g ^. snake      = Snake

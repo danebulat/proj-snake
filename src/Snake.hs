@@ -1,9 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 module Snake
   ( initGame
   , step'
   , turn
+  , Config (..)
   , Game(..)
   , Direction(..)
   , dead, food, score, snake, doubleFood
@@ -25,24 +27,24 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Sequence (Seq(..), (<|))
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..), _x, _y)
-import System.Random (Random(..), newStdGen, randomRIO)
+import System.Random (randomRIO)
 
 -- Types
 
 -- Pass via ReaderT
-data Env = Env
-  { width'            :: Int
-  , height'           :: Int
-  , scoreIncGoodFood' :: Int
-  , scoreIncBadFood'  :: Int
+data Config = Config
+  { _width            :: Int
+  , _height           :: Int
+  , _scoreIncGoodFood :: Int
+  , _scoreIncBadFood  :: Int
   } deriving (Eq, Show)
 
-instance Default Env where
-  def = Env
-    { width'            = 20
-    , height'           = 20
-    , scoreIncGoodFood' = 10
-    , scoreIncBadFood'  = -30
+instance Default Config where
+  def = Config
+    { _width            = 20
+    , _height           = 20
+    , _scoreIncGoodFood = 10
+    , _scoreIncBadFood  = -30
     }
 
 data Game = Game
@@ -68,23 +70,19 @@ data Direction
   deriving (Eq, Show)
 
 makeLenses ''Game
+makeLenses ''Config
 
--- Constants
-
-height, width :: Int
-height = 20
-width = 20
+type MRSIO a = MaybeT (ReaderT Config (StateT Game IO)) a
 
 -- Functions
 -- | Top function for performing a game step 
 step' :: Game -> IO Game
-step' = execStateT (runMaybeT doStep)
+step' = execStateT (runReaderT (runMaybeT doStep) (def :: Config))
 
 -- | Entry point to the monad transformer stack 
-doStep :: MaybeT (StateT Game IO) ()
+doStep :: MRSIO ()
 doStep = do
-  -- get game environment
-  g <- lift get
+  g <- lift $ lift get
 
   -- make sure the game isn't paused or over 
   let isPaused = g ^. paused
@@ -93,93 +91,97 @@ doStep = do
   MaybeT $ guard <$> (pure $ not stopComp)
 
   -- unlock from last directional turn
-  lift $ modify (\s -> s & locked .~ False)
+  lift $ lift $ modify (\s -> s & locked .~ False)
 
   die'                -- die (move into boundary), 
   eatFood'            -- eat (moved into food),
   eatDoubleFood
-  lift $ modify move' -- move (move into space)
+  move'
 
 -- | Handle the possibility of game over 
-die' :: MaybeT (StateT Game IO) ()
+die' :: MRSIO ()
 die' = do
+  nxt <- nextHead
   -- if next head is an element in Snake, set dead to True
-  lift $ modify (\s -> let next = nextHead s in
-                    if next `elem` s ^. snake
-                      then s & dead .~ True else s)
+  lift $ lift $ modify (\s ->
+    if nxt `elem` s ^. snake then s & dead .~ True else s)
 
 -- | Move snake along in a marquee fashion
-move' :: Game -> Game
-move' g@Game { _snake = (s :|> _) } = g & snake .~ (nextHead g <| s)
-move' _                             = error "Snakes can't be empty!"
+move' :: MRSIO ()
+move' = do
+  n <- nextHead
+  g <- lift $ lift get
+  let ln = S.length (g ^. snake) - 1         -- snake length - 1
+      cs = n <| S.deleteAt ln (g ^. snake)   -- new snake coords 
+  lift $ lift $ put (g & snake .~ cs)
 
 -- | Handle snake head landing on food 
-eatFood' :: MaybeT (StateT Game IO) ()
+eatFood' :: MRSIO ()
 eatFood' = do
-  g <- lift get
-  if nextHead g == g ^. food
+  g <- lift $ lift get
+  nxt <- nextHead
+  if nxt == g ^. food
     then do
-      lift $ modify (\s -> s & score +~ 10
-                             & snake .~ nextHead s <| s ^. snake)
+      lift $ lift $ modify (\s -> s & score +~ 10
+                                    & snake .~ nxt <| s ^. snake)
       nextFood'
     else MaybeT $ pure (Just ())
 
 -- | Calculate a new food coordinate 
-nextFood' :: MaybeT (StateT Game IO) ()
+nextFood' :: MRSIO ()
 nextFood' = do
-  -- TODO: Get width + height from Reader 
   -- generate new coordinates for next food
-  x <- liftIO $ randomRIO (0, width - 1)
-  y <- liftIO $ randomRIO (0, height - 1)
+  e <- lift ask
+  s <- lift $ lift get
+  x <- liftIO $ randomRIO (0, e ^. width - 1)
+  y <- liftIO $ randomRIO (0, e ^. height - 1)
 
   -- check if it isn't on top of the snake
-  s <- lift get
-  if V2 x y `elem` s ^. snake || V2 x y == s ^. doubleFood
+  if (V2 x y `elem` s ^. snake) || (V2 x y == s ^. doubleFood)
     then nextFood'
-    else lift $ modify (\s' -> s' & food .~ V2 x y)
+    else lift $ lift $ modify (\s' -> s' & food .~ V2 x y)
 
 -- -------------------------------------------------------------------
-eatDoubleFood :: MaybeT (StateT Game IO) ()
+eatDoubleFood :: MRSIO ()
 eatDoubleFood = do
-  s <- lift get
-  if nextHead s == s ^. doubleFood
-    -- increase score and make snake shorter 
-    then MaybeT $ fmap Just $ do
-           modify $ \s ->
-             let cs  = s ^. snake
-                 cs' = if length cs <= 1 then cs else initSnake cs
-             in s & score +~ (-30) & snake .~ cs'
-
-           -- calculate next double food Coord 
-           nextDoubleFood
-      else MaybeT $ pure (Just ())
+  g <- lift $ lift get
+  nxt <- nextHead
+  if nxt == g ^. doubleFood
+    then do
+      lift $ lift $ modify (\s -> s & score +~ (-30)
+                                    & snake .~ initSnake (s ^. snake))
+      nextDoubleFood
+    else MaybeT $ pure (Just ())
   where
-    initSnake cs = S.deleteAt (S.length cs - 1) cs
+    initSnake cs =
+      if S.length cs <= 1 then cs else S.deleteAt (S.length cs - 1) cs
 
-nextDoubleFood :: StateT Game IO ()
+nextDoubleFood :: MRSIO ()
 nextDoubleFood = do
-  x <- liftIO $ randomRIO (0, width - 1)
-  y <- liftIO $ randomRIO (0, height - 1)
+  e <- lift ask
+  s <- lift $ lift get
+  x <- liftIO $ randomRIO (0, e ^. width - 1)
+  y <- liftIO $ randomRIO (0, e ^. height - 1)
 
   -- check if new coord isn't on top of the snake
-  s <- get
-  if V2 x y `elem` s ^. snake || V2 x y == s ^. food 
+  if (V2 x y `elem` s ^. snake) || (V2 x y == s ^. food)
     then nextDoubleFood
-    else  modify (\s' -> s' & doubleFood .~ V2 x y)
+    else lift $ lift $ modify (\s' -> s' & doubleFood .~ V2 x y)
 
 -------------------------------------------------------------------
 
--- | Get next head position of the snake (called in `move` and `eatFoot`)
-nextHead :: Game -> Coord
-nextHead Game { _dir = d, _snake = (a :<| _) }            -- d :: Direction, a :: Coord
---                                  ^^^^^^^ head Coord of Snake 
-  | d == North = a & _y %~ (\y -> (y + 1) `mod` height)   -- up one 
-  | d == South = a & _y %~ (\y -> (y - 1) `mod` height)   -- down one
-  | d == East  = a & _x %~ (\x -> (x + 1) `mod` width)    -- left one 
-  | d == West  = a & _x %~ (\x -> (x - 1) `mod` width)    -- right one
-  --                 ^^ modify _x or _y of the snake head Coord 
-nextHead _ = error "Snakes can't be empty!"
+-- | Get next head position of the snake (called in move, eat* functions)
+nextHead :: MRSIO (V2 Int)
+nextHead = do
+  r <- lift ask
+  s <- lift $ lift get
+  let (a :<| _) = s ^. snake
 
+  case s ^. dir of
+    North -> MaybeT $ pure $ Just $ a & _y %~ (\y -> (y + 1) `mod` (r ^. height))
+    South -> MaybeT $ pure $ Just $ a & _y %~ (\y -> (y - 1) `mod` (r ^. height))
+    East  -> MaybeT $ pure $ Just $ a & _x %~ (\x -> (x + 1) `mod` (r ^. width))
+    West  -> MaybeT $ pure $ Just $ a & _x %~ (\x -> (x - 1) `mod` (r ^. width))
 
 -- | Turn game direction (only turns orthogonally)
 --
@@ -200,28 +202,27 @@ turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
 -- | Generate a random grid coordinate
 -- 
 -- Pass a list of coordinates to avoid
--- TODO: Pass environment via ReaderT
-randGridCoord :: [V2 Int] -> IO (V2 Int)
+randGridCoord :: [V2 Int] -> ReaderT Config IO (V2 Int)
 randGridCoord cs = do
-  let snakeStart = V2 (width `div` 2) (height `div` 2)
-  xy <- randXY
-  if xy `elem` cs then randGridCoord cs else return xy
-  where
-    randXY = do
-      x <- randomRIO (0, width - 1)
-      y <- randomRIO (0, height - 1)
-      return (V2 x y)
+  r <- ask
+  xy <- liftIO $ randXY r
+  if xy `elem` cs then randGridCoord cs
+                  else return xy
+  where randXY r = do
+          x <- randomRIO (0, r ^. width - 1)
+          y <- randomRIO (0, r ^. height - 1)
+          return $ V2 x y
 
 -- | Initialize a paused game with random food locations
-initGame :: IO Game
-initGame = do
-  let xm = width  `div` 2
-      ym = height `div` 2
+initGame :: Config -> IO Game
+initGame r = do
+  let xm = r ^. width  `div` 2
+      ym = r ^. height `div` 2
       z  = V2 xm ym -- snake start position
-  
-  f <- randGridCoord [z]
-  h <- randGridCoord [z, f]
-  
+
+  f <- runReaderT (randGridCoord [z]) def
+  h <- runReaderT (randGridCoord [z, f]) def
+
   let g  = Game
         { _snake      = S.singleton (V2 xm ym)
         , _food       = f
@@ -233,5 +234,5 @@ initGame = do
         , _locked     = False
         }
 
-  r <- runStateT (runMaybeT nextFood') g
-  return $ snd r 
+  r <- runStateT (runReaderT (runMaybeT nextFood') (def :: Config)) g
+  return $ snd r
