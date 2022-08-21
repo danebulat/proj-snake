@@ -22,7 +22,6 @@ import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Extra (orM)
 import Data.Sequence (Seq(..), (<|))
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..), _x, _y)
@@ -51,7 +50,6 @@ data Game = Game
   , _dir         :: Direction      -- ^ direction
   , _food        :: Coord          -- ^ location of the food
   , _doubleFood  :: Coord          -- ^ location of the double food
-  , _foods       :: Stream Coord   -- ^ infinite list of random next food locations
   , _dead        :: Bool           -- ^ game over flag
   , _paused      :: Bool           -- ^ paused flag
   , _score       :: Int            -- ^ score
@@ -61,9 +59,6 @@ data Game = Game
 type Coord = V2 Int
 
 type Snake = Seq Coord
-
-data Stream a = a :| Stream a
-  deriving (Show)
 
 data Direction
   = North
@@ -202,21 +197,35 @@ turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
             | otherwise = c
             -- no change in direction
 
--- | Initialize a paused game with random food location
+-- | Generate a random grid coordinate
+-- 
+-- Pass a list of coordinates to avoid
+-- TODO: Pass environment via ReaderT
+randGridCoord :: [V2 Int] -> IO (V2 Int)
+randGridCoord cs = do
+  let snakeStart = V2 (width `div` 2) (height `div` 2)
+  xy <- randXY
+  if xy `elem` cs then randGridCoord cs else return xy
+  where
+    randXY = do
+      x <- randomRIO (0, width - 1)
+      y <- randomRIO (0, height - 1)
+      return (V2 x y)
 
--- TODO: Functions for generating food x and y coords
--- TODO: Remove Stream functions
+-- | Initialize a paused game with random food locations
 initGame :: IO Game
 initGame = do
-  (f :| (h :| fs)) <-
-    fromList . randomRs (V2 0 0, V2 (width - 1) (height - 1)) <$> newStdGen
-  let xm = width `div` 2
+  let xm = width  `div` 2
       ym = height `div` 2
-      g  = Game
+      z  = V2 xm ym -- snake start position
+  
+  f <- randGridCoord [z]
+  h <- randGridCoord [z, f]
+  
+  let g  = Game
         { _snake      = S.singleton (V2 xm ym)
         , _food       = f
         , _doubleFood = h
-        , _foods      = fs
         , _score      = 0
         , _dir        = North
         , _dead       = False
@@ -226,6 +235,3 @@ initGame = do
 
   r <- runStateT (runMaybeT nextFood') g
   return $ snd r 
-
-fromList :: [a] -> Stream a
-fromList = foldr (:|) (error "Streams must be infinite")

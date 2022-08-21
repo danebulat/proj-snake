@@ -32,7 +32,6 @@ executable proj-snake
                     , brick
                     , containers
                     , data-default
-                    , extra
                     , linear
                     , lens
                     , random
