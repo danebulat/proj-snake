@@ -1,14 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Snake
   ( initGame
   , step
   , turn
-  , Config (..)
-  , Game(..)
-  , Direction(..)
+  , Config (..) , Direction(..), Game(..)
   , dead, foodP, foodM, score, snake
   , height, width
   ) where
@@ -31,64 +28,14 @@ import qualified Data.Sequence as S
 import Linear.V2 (V2(..), _x, _y)
 import System.Random (randomRIO)
 
--- Types
+import AppTypes
 
--- Pass via ReaderT
-data Config = Config
-  { _width            :: Int
-  , _height           :: Int
-  , _scoreIncGoodFood :: Int
-  , _scoreIncBadFood  :: Int
-  } deriving (Eq, Show)
-
-instance Default Config where
-  def = Config
-    { _width            = 20
-    , _height           = 20
-    , _scoreIncGoodFood = 10
-    , _scoreIncBadFood  = -30
-    }
-
-data Game = Game
-  { _snake       :: Snake          -- ^ snake as a sequence of points in V2
-  , _dir         :: Direction      -- ^ direction
-  , _foodP       :: Coord          -- ^ location of the food
-  , _foodM       :: Coord          -- ^ location of the double food
-  , _dead        :: Bool           -- ^ game over flag
-  , _paused      :: Bool           -- ^ paused flag
-  , _score       :: Int            -- ^ score
-  , _locked      :: Bool           -- ^ lock to disallow duplicate turns between time steps
-  , _spawnFoodP  :: Bool
-  , _spawnFoodM  :: Bool 
-  } deriving (Show)
-
-type Coord = V2 Int
-
-type Snake = Seq Coord
-
-data Direction
-  = North
-  | South
-  | East
-  | West
-  deriving (Eq, Show)
-
-data LogEvt = LogFoodPlus
-            | LogFoodMinus
-            | LogDead
-            deriving (Eq, Show)
-
-makeLenses ''Game
-makeLenses ''Config
-
-type MRSWIO a = MaybeT (ReaderT Config (StateT Game (WriterT Text IO))) a
-
+-- | Logging outputs 
 logt :: LogEvt -> Text
 logt LogFoodPlus  = "Ate food (+10 points)"
 logt LogFoodMinus = "Ate food (-30 points)"
 logt LogDead      = "Game over"
 
--- Functions
 -- | Top function for performing a game step 
 step :: Game -> IO (Game, Text)
 step g = do
@@ -166,8 +113,8 @@ mkFoodP = do
     then mkFoodP
     else lift $ lift $ modify (\s' -> s' & foodP .~ V2 x y
                                          & spawnFoodP .~ False)
--- -------------------------------------------------------------------
 
+-- -------------------------------------------------------------------
 eatMinus :: MRSWIO ()
 eatMinus = do
   g <- lift $ lift get
@@ -197,7 +144,6 @@ mkFoodM = do
                                          & spawnFoodM .~ False)
 
 -------------------------------------------------------------------
-
 -- | Get next head position of the snake (called in move, eat* functions)
 nextHead :: MRSWIO (V2 Int)
 nextHead = do
