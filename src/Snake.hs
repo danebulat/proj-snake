@@ -93,22 +93,21 @@ doStep = do
   -- unlock from last directional turn
   lift $ lift $ modify (\s -> s & locked .~ False)
 
-  die'                -- die (move into boundary), 
-  eatFood'            -- eat (moved into food),
-  eatDoubleFood
-  move'
+  -- handle game events (order or computation matters)
+  eatPlus >> eatMinus >> move >> die
 
 -- | Handle the possibility of game over 
-die' :: MRSIO ()
-die' = do
-  nxt <- nextHead
-  -- if next head is an element in Snake, set dead to True
+die :: MRSIO ()
+die = do
+  -- if the snake's head is over another snake coord,
+  -- set dead to True
   lift $ lift $ modify (\s ->
-    if nxt `elem` s ^. snake then s & dead .~ True else s)
+    let (h :<| hs) = s ^. snake in
+    if h `elem` hs then s & dead .~ True else s)
 
 -- | Move snake along in a marquee fashion
-move' :: MRSIO ()
-move' = do
+move :: MRSIO ()
+move = do
   n <- nextHead
   g <- lift $ lift get
   let ln = S.length (g ^. snake) - 1         -- snake length - 1
@@ -116,8 +115,8 @@ move' = do
   lift $ lift $ put (g & snake .~ cs)
 
 -- | Handle snake head landing on food 
-eatFood' :: MRSIO ()
-eatFood' = do
+eatPlus :: MRSIO ()
+eatPlus = do
   g <- lift $ lift get
   nxt <- nextHead
   if nxt == g ^. food
@@ -142,8 +141,8 @@ nextFood' = do
     else lift $ lift $ modify (\s' -> s' & food .~ V2 x y)
 
 -- -------------------------------------------------------------------
-eatDoubleFood :: MRSIO ()
-eatDoubleFood = do
+eatMinus :: MRSIO ()
+eatMinus = do
   g <- lift $ lift get
   nxt <- nextHead
   if nxt == g ^. doubleFood
