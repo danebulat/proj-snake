@@ -131,15 +131,15 @@ drawGrid g r = withBorderStyle BS.unicodeBold
     cellsInRow y = [drawCoord (V2 x y) | x <- [0..w-1]]
     drawCoord    = drawCell . cellAt
     cellAt c
-      | c `elem` g ^. snake      = Snake
-      | c ==     g ^. food       = Food
-      | c ==     g ^. doubleFood = DoubleFood
-      | otherwise                = Empty
+      | c `elem` g ^. snake = Snake
+      | c ==     g ^. foodP = Food
+      | c ==     g ^. foodM = DoubleFood
+      | otherwise           = Empty
 
 drawCell :: Cell -> Widget Name
 drawCell Snake      = withAttr snakeAttr cw
-drawCell Food       = withAttr foodAttr cw
-drawCell DoubleFood = withAttr doubleFoodAttr cw
+drawCell Food       = withAttr foodPAttr cw
+drawCell DoubleFood = withAttr foodMAttr cw
 drawCell Empty      = withAttr emptyAttr cw
 
 cw :: Widget Name
@@ -148,16 +148,19 @@ cw = str "  "
 theMap :: AttrMap
 theMap = attrMap V.defAttr
   [ (snakeAttr,      V.blue  `on` V.blue)
-  , (foodAttr,       V.red   `on` V.red)
-  , (doubleFoodAttr, V.green `on` V.green)
+  , (foodPAttr,       V.red   `on` V.red)
+  , (foodMAttr, V.green `on` V.green)
   , (gameOverAttr, fg V.red `V.withStyle` V.bold)
   ]
 
 gameOverAttr :: AttrName
 gameOverAttr = "gameOver"
 
-snakeAttr, foodAttr, doubleFoodAttr, emptyAttr :: AttrName
+snakeAttr, foodPAttr, foodMAttr, emptyAttr :: AttrName
 snakeAttr = "snakeAttr"
-foodAttr = "foodAttr"
+foodPAttr = "foodPAttr"
 emptyAttr = "emptyAttr"
-doubleFoodAttr = "doubleFoodAttr"
+foodMAttr = "foodMAttr"
+
+
+
