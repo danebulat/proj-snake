@@ -35,6 +35,7 @@ executable proj-snake
                     , linear
                     , lens
                     , random
+                    , text
                     , transformers
                     , vty 
     default-language: Haskell2010

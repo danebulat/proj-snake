@@ -6,7 +6,8 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
 import Data.Maybe (fromMaybe)
 import Data.Default (def)
-
+import Data.Text (Text)
+import qualified Data.Text as T
 import Snake
 
 import Brick
@@ -73,7 +74,10 @@ main = do
 
 handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
 -- call step to continue the game 
-handleEvent g (AppEvent Tick)                       = liftIO (step' g) >>= continue
+handleEvent g (AppEvent Tick)                       = do (g', w) <- liftIO (step g)
+                                                         -- TODO: Handle log
+                                                         -- May need to append in Game
+                                                         continue g'
 -- handle turning 
 handleEvent g (VtyEvent (V.EvKey V.KUp []))         = continue $ turn North g
 handleEvent g (VtyEvent (V.EvKey V.KDown []))       = continue $ turn South g

@@ -1,9 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Snake
   ( initGame
-  , step'
+  , step
   , turn
   , Config (..)
   , Game(..)
@@ -17,13 +18,17 @@ import Control.Monad (guard)
 import Data.Bool (bool)
 import Data.Default
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
+import qualified Data.Text as T
 
 import Control.Lens hiding ((<|), (|>), (:>), (:<))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
+import Control.Monad.Trans.Writer 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
+
 import Data.Sequence (Seq(..), (<|))
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..), _x, _y)
@@ -69,21 +74,34 @@ data Direction
   | West
   deriving (Eq, Show)
 
+data LogEvt = LogFoodPlus
+            | LogFoodMinus
+            | LogDead
+            deriving (Eq, Show)
+
 makeLenses ''Game
 makeLenses ''Config
 
-type MRSIO a = MaybeT (ReaderT Config (StateT Game IO)) a
+type MRSWIO a = MaybeT (ReaderT Config (StateT Game (WriterT Text IO))) a
+
+logt :: LogEvt -> Text
+logt LogFoodPlus  = "Eaten food (+10 points)"
+logt LogFoodMinus = "Eaten food (-30 points)"
+logt LogDead      = "Game over"
 
 -- Functions
 -- | Top function for performing a game step 
-step' :: Game -> IO Game
-step' = execStateT (runReaderT (runMaybeT doStep) (def :: Config))
+step :: Game -> IO (Game, Text)
+step g = do
+  (a, w) <- runWriterT (runStateT (runReaderT (runMaybeT doStep) def) g)
+  --if T.length w > 0 then putStrLn $ T.unpack w else putStr ""
+  return (snd a, w)
 
 -- | Entry point to the monad transformer stack 
-doStep :: MRSIO ()
+doStep :: MRSWIO ()
 doStep = do
   g <- lift $ lift get
-
+  
   -- make sure the game isn't paused or over 
   let isPaused = g ^. paused
       isDead   = g ^. dead
@@ -97,16 +115,20 @@ doStep = do
   eatPlus >> eatMinus >> move >> die
 
 -- | Handle the possibility of game over 
-die :: MRSIO ()
+die :: MRSWIO ()
 die = do
   -- if the snake's head is over another snake coord,
   -- set dead to True
-  lift $ lift $ modify (\s ->
-    let (h :<| hs) = s ^. snake in
-    if h `elem` hs then s & dead .~ True else s)
+  s <- lift $ lift get
+
+  let (h :<| hs) = s ^. snake in
+    if h `elem` hs 
+       then do lift $ lift $ modify (\s -> s & dead .~ True)
+               lift $ lift $ lift $ tell (logt LogDead)
+       else MaybeT $ pure (Just ())
 
 -- | Move snake along in a marquee fashion
-move :: MRSIO ()
+move :: MRSWIO ()
 move = do
   n <- nextHead
   g <- lift $ lift get
@@ -115,7 +137,7 @@ move = do
   lift $ lift $ put (g & snake .~ cs)
 
 -- | Handle snake head landing on food 
-eatPlus :: MRSIO ()
+eatPlus :: MRSWIO ()
 eatPlus = do
   g <- lift $ lift get
   nxt <- nextHead
@@ -123,11 +145,12 @@ eatPlus = do
     then do
       lift $ lift $ modify (\s -> s & score +~ 10
                                     & snake .~ nxt <| s ^. snake)
+      lift $ lift $ lift $ tell (logt LogFoodPlus)
       nextFood'
     else MaybeT $ pure (Just ())
 
 -- | Calculate a new food coordinate 
-nextFood' :: MRSIO ()
+nextFood' :: MRSWIO ()
 nextFood' = do
   -- generate new coordinates for next food
   e <- lift ask
@@ -141,7 +164,7 @@ nextFood' = do
     else lift $ lift $ modify (\s' -> s' & food .~ V2 x y)
 
 -- -------------------------------------------------------------------
-eatMinus :: MRSIO ()
+eatMinus :: MRSWIO ()
 eatMinus = do
   g <- lift $ lift get
   nxt <- nextHead
@@ -149,13 +172,14 @@ eatMinus = do
     then do
       lift $ lift $ modify (\s -> s & score +~ (-30)
                                     & snake .~ initSnake (s ^. snake))
+      lift $ lift $ lift $ tell (logt LogFoodMinus)
       nextDoubleFood
     else MaybeT $ pure (Just ())
   where
     initSnake cs =
       if S.length cs <= 1 then cs else S.deleteAt (S.length cs - 1) cs
 
-nextDoubleFood :: MRSIO ()
+nextDoubleFood :: MRSWIO ()
 nextDoubleFood = do
   e <- lift ask
   s <- lift $ lift get
@@ -166,11 +190,10 @@ nextDoubleFood = do
   if (V2 x y `elem` s ^. snake) || (V2 x y == s ^. food)
     then nextDoubleFood
     else lift $ lift $ modify (\s' -> s' & doubleFood .~ V2 x y)
-
 -------------------------------------------------------------------
 
 -- | Get next head position of the snake (called in move, eat* functions)
-nextHead :: MRSIO (V2 Int)
+nextHead :: MRSWIO (V2 Int)
 nextHead = do
   r <- lift ask
   s <- lift $ lift get
@@ -233,5 +256,6 @@ initGame r = do
         , _locked     = False
         }
 
-  r <- runStateT (runReaderT (runMaybeT nextFood') (def :: Config)) g
-  return $ snd r
+  r <- runWriterT (runStateT (runReaderT (runMaybeT nextFood') def) g)
+  return $ snd . fst $ r
+
