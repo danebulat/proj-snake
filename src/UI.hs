@@ -19,7 +19,8 @@ import Brick
   , withBorderStyle
   , str
   , attrMap, withAttr, emptyWidget, AttrName, on, fg
-  , (<+>)
+  , (<+>), (<=>)
+  , fill
   )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
@@ -31,21 +32,18 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
 
+-- -------------------------------------------------------------------
 -- Types
 
--- | Ticks mark passing of time
---
--- This is our custom event that will be constantly fed into the app.
+-- | Ticks custom event 
 data Tick = Tick
 
--- | Named resources
---
--- Not currently used, but will be easier to refactor
--- if we call this "Name" now.
+-- | Named resources (not currently used)
 type Name = ()
 
 data Cell = Snake | Food | DoubleFood | Empty
 
+-- -------------------------------------------------------------------
 -- App definition
 
 app :: App Game Tick Name
@@ -68,16 +66,23 @@ main = do
   
   let builder = V.mkVty V.defaultConfig
   initialVty <- builder
-  void $ customMain initialVty builder (Just chan) app g
+  void $ customMain initialVty    -- Vty 
+                    builder       -- IO Vty 
+                    (Just chan)   -- Maybe (BChan e)
+                    app           -- App s e n
+                    g             -- s
 
+-- -------------------------------------------------------------------
 -- Handling events
 
 handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
 -- call step to continue the game 
-handleEvent g (AppEvent Tick)                       = do (g', w) <- liftIO (step g)
-                                                         -- TODO: Handle log
-                                                         -- May need to append in Game
-                                                         continue g'
+handleEvent g (AppEvent Tick) = do
+  (g', w) <- liftIO (step g)
+  -- TODO: Handle log
+  -- May need to append in Game
+  continue g'
+
 -- handle turning 
 handleEvent g (VtyEvent (V.EvKey V.KUp []))         = continue $ turn North g
 handleEvent g (VtyEvent (V.EvKey V.KDown []))       = continue $ turn South g
@@ -94,41 +99,49 @@ handleEvent g (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt g
 handleEvent g (VtyEvent (V.EvKey V.KEsc []))        = halt g
 handleEvent g _                                     = continue g
 
+-- -------------------------------------------------------------------
 -- Drawing
 
 drawUI :: Game -> [Widget Name]
 drawUI g =
-  let r = def in
-  [ C.center $ padRight (Pad 2) (drawStats g) <+> drawGrid g r ]
+  [ vBox
+    [ drawStats g
+      <=> vBox [ C.center $  drawGrid g def]
+      <=> drawLogger g
+    ]
+  ]
 
 drawStats :: Game -> Widget Name
-drawStats g = hLimit 11
-  $ vBox [ drawScore (g ^. score)
-         , padTop (Pad 2) $ drawGameOver (g ^. dead)
-         ]
-
-drawScore :: Int -> Widget Name
-drawScore n = withBorderStyle BS.unicodeBold
-  $ B.borderWithLabel (str "Score")
-  $ C.hCenter
-  $ padAll 1
-  $ str $ show n
+drawStats g =
+  hBox [ withBorderStyle BS.unicode
+       $ B.borderWithLabel (str "| Snake |")
+       $ padAll 1
+       $ vLimit 1
+       $ C.center
+       $ str $ "Score: " <> show (g ^. score)
+       ]
 
 drawGameOver :: Bool -> Widget Name
 drawGameOver dead =
   if dead
-     then withAttr gameOverAttr $ C.hCenter $ str "GAME OVER"
-     else emptyWidget
+     then withAttr gameOverAttr $ C.center $ str "GAME OVER"
+     else C.center $ str "Playing..."
+
+drawLogger :: Game -> Widget Name
+drawLogger g =
+  hBox [ B.border $ vLimit 5 $ padAll 1 $ C.center (str "Some Left Text")
+         <+> B.vBorder
+         <+> drawGameOver (g ^. dead) ]
 
 drawGrid :: Game -> Config -> Widget Name
-drawGrid g r = withBorderStyle BS.unicodeBold
-  $ B.borderWithLabel (str "Snake")
+drawGrid g e = withBorderStyle BS.unicodeBold
+  $ B.border
   $ vBox rows
   where
-    h = r ^. height
-    w = r ^. width 
-    rows         = [hBox $ cellsInRow r | r <- [h-1,h-2..0]]
-    cellsInRow y = [drawCoord (V2 x y) | x <- [0..w-1]]
+    h = e ^. height
+    w = e ^. width 
+    rows         = [ hBox $ cellsInRow r | r <- [h-1,h-2..0] ]
+    cellsInRow y = [ drawCoord (V2 x y)  | x <- [0..w-1] ]
     drawCoord    = drawCell . cellAt
     cellAt c
       | c `elem` g ^. snake = Snake
@@ -137,18 +150,21 @@ drawGrid g r = withBorderStyle BS.unicodeBold
       | otherwise           = Empty
 
 drawCell :: Cell -> Widget Name
-drawCell Snake      = withAttr snakeAttr cw
-drawCell Food       = withAttr foodPAttr cw
-drawCell DoubleFood = withAttr foodMAttr cw
-drawCell Empty      = withAttr emptyAttr cw
+drawCell Snake      = withAttr snakeAttr cellW
+drawCell Food       = withAttr foodPAttr cellW
+drawCell DoubleFood = withAttr foodMAttr cellW
+drawCell Empty      = withAttr emptyAttr cellW
 
-cw :: Widget Name
-cw = str "  "
+cellW :: Widget Name
+cellW = str "  "
+
+-- -------------------------------------------------------------------
+-- Attributes
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (snakeAttr,      V.blue  `on` V.blue)
-  , (foodPAttr,       V.red   `on` V.red)
+  [ (snakeAttr, V.blue  `on` V.blue)
+  , (foodPAttr, V.red   `on` V.red)
   , (foodMAttr, V.green `on` V.green)
   , (gameOverAttr, fg V.red `V.withStyle` V.bold)
   ]

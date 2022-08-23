@@ -142,8 +142,8 @@ mkFoodM = do
     then mkFoodM
     else lift $ lift $ modify (\s' -> s' & foodM .~ V2 x y
                                          & spawnFoodM .~ False)
+-- -----------------------------------------------------------------
 
--------------------------------------------------------------------
 -- | Get next head position of the snake (called in move, eat* functions)
 nextHead :: MRSWIO (V2 Int)
 nextHead = do
@@ -209,6 +209,7 @@ initGame r = do
         , _spawnFoodP = False
         , _spawnFoodM = False
         }
+  
   --r <- runWriterT (runStateT (runReaderT (runMaybeT mkFood) def) g)
   --return $ snd . fst $ r
   
