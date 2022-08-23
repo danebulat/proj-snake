@@ -50,8 +50,8 @@ data Game = Game
   , _score       :: Int            -- ^ score
   , _locked      :: Bool           -- ^ lock to disallow duplicate turns between time steps
   , _spawnFoodP  :: Bool
-  , _spawnFoodM  :: Bool 
-  } deriving (Show)
+  , _spawnFoodM  :: Bool
+  } 
 
 type Coord = V2 Int
 type Snake = Seq Coord

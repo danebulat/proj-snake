@@ -20,12 +20,13 @@ import Brick
   , str
   , attrMap, withAttr, emptyWidget, AttrName, on, fg
   , (<+>), (<=>)
-  , fill
+  , fill, viewport, viewportScroll, ViewportScroll, vScrollBy, padLeftRight
   )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
 import qualified Brick.Widgets.Center as C
+import Brick.Types (ViewportType(..))
 import Control.Lens ((^.))
 import qualified Graphics.Vty as V
 import Data.Sequence (Seq)
@@ -39,9 +40,12 @@ import Linear.V2 (V2(..))
 data Tick = Tick
 
 -- | Named resources (not currently used)
-type Name = ()
+data Name = VP1 deriving (Ord, Show, Eq)
 
 data Cell = Snake | Food | DoubleFood | Empty
+
+vp1Scroll :: ViewportScroll Name
+vp1Scroll = viewportScroll VP1
 
 -- -------------------------------------------------------------------
 -- App definition
@@ -88,10 +92,10 @@ handleEvent g (VtyEvent (V.EvKey V.KUp []))         = continue $ turn North g
 handleEvent g (VtyEvent (V.EvKey V.KDown []))       = continue $ turn South g
 handleEvent g (VtyEvent (V.EvKey V.KRight []))      = continue $ turn East g
 handleEvent g (VtyEvent (V.EvKey V.KLeft []))       = continue $ turn West g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = continue $ turn North g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = continue $ turn South g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue $ turn East g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'h') [])) = continue $ turn West g
+handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = vScrollBy vp1Scroll (-1) >> continue g
+handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = vScrollBy vp1Scroll 1 >> continue g
+handleEvent g (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue g
+handleEvent g (VtyEvent (V.EvKey (V.KChar 'h') [])) = continue g
 -- reset game 
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
 -- quit game
@@ -128,10 +132,14 @@ drawGameOver dead =
      else C.center $ str "Playing..."
 
 drawLogger :: Game -> Widget Name
-drawLogger g =
-  hBox [ B.border $ vLimit 5 $ padAll 1 $ C.center (str "Some Left Text")
-         <+> B.vBorder
-         <+> drawGameOver (g ^. dead) ]
+drawLogger g = pair
+  where
+     pair = B.borderWithLabel (str "| Logger |") $ vLimit 6 $ hBox
+            [ viewport VP1 Vertical  $ padLeftRight 1  $ 
+              vBox (str <$> ["Line " <> (show i) | i <- [3..50 :: Int]])
+            ]
+            <+> vBox [ str "\n", B.vBorder ]
+            <+> drawGameOver (g ^. dead)
 
 drawGrid :: Game -> Config -> Widget Name
 drawGrid g e = withBorderStyle BS.unicodeBold
