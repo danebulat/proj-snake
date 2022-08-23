@@ -53,6 +53,7 @@ data Game = Game
   , _locked      :: Bool           -- ^ lock to disallow duplicate turns between time steps
   , _spawnFoodP  :: Bool
   , _spawnFoodM  :: Bool
+  , _makeLonger  :: Bool
   , _logText     :: [(LogEvt, Text)]
   , _updateLog   :: Bool
   }

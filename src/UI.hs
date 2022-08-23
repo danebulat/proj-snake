@@ -40,7 +40,7 @@ import AppTypes
 -- | Ticks custom event 
 data Tick = Tick
 
--- | Named resources (not currently used)
+-- | Named resources
 data Name = VP1 deriving (Ord, Show, Eq)
 
 data Cell = Snake | Food | DoubleFood | Empty

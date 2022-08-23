@@ -35,6 +35,7 @@ logt :: LogEvt -> Text
 logt LogFoodPlus  = "Ate food (+10 points)"
 logt LogFoodMinus = "Ate food (-30 points)"
 logt LogDead      = "Game over"
+logt LogTurn      = "Turned "
 
 -- | Top function for performing a game step 
 step :: Game -> IO (Game, LogData)
@@ -76,9 +77,17 @@ move :: MRSWIO ()
 move = do
   n <- nextHead
   g <- lift $ lift get
-  let ln = S.length (g ^. snake) - 1         -- snake length - 1
-      cs = n <| S.deleteAt ln (g ^. snake)   -- new snake coords 
-  lift $ lift $ put (g & snake .~ cs)
+
+  -- keep snake length the same if its to be made longer 
+  let cs = if g ^. makeLonger 
+           then n <| g ^. snake
+           else n <| S.deleteAt (truncLen g) (g ^. snake)
+
+  -- update snake coords in state
+  lift $ lift $ put (if g ^. makeLonger
+                     then g & snake .~ cs & makeLonger .~ False
+                     else g & snake .~ cs)
+  where truncLen g = S.length (g ^. snake) - 1
 
 -- | Handle generating new food coordinates
 mkFood :: MRSWIO ()
@@ -91,11 +100,11 @@ mkFood = do
 eatPlus :: MRSWIO ()
 eatPlus = do
   g <- lift $ lift get
-  nxt <- nextHead
-  if nxt == g ^. foodP
+  let (h :<| _) = g ^. snake 
+  if h == g ^. foodP
     then do
       lift $ lift $ modify (\s -> s & score +~ 10
-                                    & snake .~ nxt <| s ^. snake
+                                    & makeLonger .~ True
                                     & spawnFoodP .~ True)
       lift $ lift $ lift $ tell [(LogFoodPlus, logt LogFoodPlus)]
     else MaybeT $ pure (Just ())
@@ -174,7 +183,7 @@ turn d g = if g ^. locked
     curDir  = g ^. dir
     nextDir = turnDir d curDir
     turned  = curDir /= nextDir
-    getTurnText d = (LogTurn, "Turned " `T.append` T.pack (show d))
+    getTurnText d = (LogTurn, logt LogTurn `T.append` T.pack (show d))
 
 turnDir :: Direction -> Direction -> Direction
 turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
@@ -221,6 +230,7 @@ initGame r = do
         , _spawnFoodM = False
         , _logText    = []
         , _updateLog  = False
+        , _makeLonger = False
         }
 
   --r <- runWriterT (runStateT (runReaderT (runMaybeT mkFood) def) g)
