@@ -19,7 +19,7 @@ import Control.Lens hiding ((<|), (|>), (:>), (:<))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Writer 
+import Control.Monad.Trans.Writer
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
 
@@ -37,7 +37,7 @@ logt LogFoodMinus = "Ate food (-30 points)"
 logt LogDead      = "Game over"
 
 -- | Top function for performing a game step 
-step :: Game -> IO (Game, Text)
+step :: Game -> IO (Game, LogData)
 step g = do
   (a, w) <- runWriterT (runStateT (runReaderT (runMaybeT doStep) def) g)
   return (snd a, w)
@@ -46,7 +46,7 @@ step g = do
 doStep :: MRSWIO ()
 doStep = do
   g <- lift $ lift get
-  
+
   -- make sure the game isn't paused or over 
   let isPaused = g ^. paused
       isDead   = g ^. dead
@@ -66,9 +66,9 @@ die = do
   s <- lift $ lift get
 
   let (h :<| hs) = s ^. snake in
-    if h `elem` hs 
+    if h `elem` hs
        then do lift $ lift $ modify (\s -> s & dead .~ True)
-               lift $ lift $ lift $ tell (logt LogDead)
+               lift $ lift $ lift $ tell [(LogDead, logt LogDead)]
        else MaybeT $ pure (Just ())
 
 -- | Move snake along in a marquee fashion
@@ -97,13 +97,13 @@ eatPlus = do
       lift $ lift $ modify (\s -> s & score +~ 10
                                     & snake .~ nxt <| s ^. snake
                                     & spawnFoodP .~ True)
-      lift $ lift $ lift $ tell (logt LogFoodPlus)
+      lift $ lift $ lift $ tell [(LogFoodPlus, logt LogFoodPlus)]
     else MaybeT $ pure (Just ())
 
 -- | Calculate a new food coordinate 
 mkFoodP :: MRSWIO ()
 mkFoodP = do
-  e <- lift ask 
+  e <- lift ask
   s <- lift $ lift get
   x <- liftIO $ randomRIO (0, e ^. width - 1)
   y <- liftIO $ randomRIO (0, e ^. height - 1)
@@ -124,7 +124,7 @@ eatMinus = do
       lift $ lift $ modify (\s -> s & score +~ (-30)
                                     & snake .~ initSnake (s ^. snake)
                                     & spawnFoodM .~ True)
-      lift $ lift $ lift $ tell (logt LogFoodMinus)
+      lift $ lift $ lift $ tell [(LogFoodMinus, logt LogFoodMinus)]
     else MaybeT $ pure (Just ())
   where
     initSnake cs =
@@ -163,7 +163,18 @@ nextHead = do
 turn :: Direction -> Game -> Game
 turn d g = if g ^. locked
   then g  -- return Game if game is locked (do not modify state)
-  else g & dir %~ turnDir d & paused .~ False & locked .~ True
+  else g & dir %~ turnDir d
+         & paused .~ False
+         & locked .~ True
+         & updateLog .~ turned
+         & if turned  -- TODO: use (%~)
+             then logText .~ ((g ^. logText) ++ [getTurnText d])
+             else logText .~ g ^. logText
+  where
+    curDir  = g ^. dir
+    nextDir = turnDir d curDir
+    turned  = curDir /= nextDir
+    getTurnText d = (LogTurn, "Turned " `T.append` T.pack (show d))
 
 turnDir :: Direction -> Direction -> Direction
 turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
@@ -174,8 +185,8 @@ turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
             -- no change in direction
 
 -- | Generate a random grid coordinate
--- 
--- Pass a list of coordinates to avoid
+--
+-- Pass a list of coordinates to avoid those value pairs
 randGridCoord :: [V2 Int] -> ReaderT Config IO (V2 Int)
 randGridCoord cs = do
   r <- ask
@@ -187,7 +198,7 @@ randGridCoord cs = do
           y <- randomRIO (0, r ^. height - 1)
           return $ V2 x y
 
--- | Initialize a paused game with random food locations
+-- | initialize a paused game with random food locations
 initGame :: Config -> IO Game
 initGame r = do
   let xm = r ^. width  `div` 2
@@ -208,10 +219,12 @@ initGame r = do
         , _locked     = False
         , _spawnFoodP = False
         , _spawnFoodM = False
+        , _logText    = []
+        , _updateLog  = False
         }
-  
+
   --r <- runWriterT (runStateT (runReaderT (runMaybeT mkFood) def) g)
   --return $ snd . fst $ r
-  
+
   return g
 

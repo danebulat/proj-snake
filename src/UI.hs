@@ -4,6 +4,7 @@ module UI where
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
+import Control.Lens ((^.), (.~), (&))
 import Data.Maybe (fromMaybe)
 import Data.Default (def)
 import Data.Text (Text)
@@ -17,21 +18,21 @@ import Brick
   , hLimit, vLimit, vBox, hBox
   , padRight, padLeft, padTop, padAll, Padding(..)
   , withBorderStyle
-  , str
+  , str, txt, fill
   , attrMap, withAttr, emptyWidget, AttrName, on, fg
   , (<+>), (<=>)
-  , fill, viewport, viewportScroll, ViewportScroll, vScrollBy, padLeftRight
+  , viewport, viewportScroll, ViewportScroll (vScrollToEnd), vScrollBy, padLeftRight
   )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
 import qualified Brick.Widgets.Center as C
 import Brick.Types (ViewportType(..))
-import Control.Lens ((^.))
 import qualified Graphics.Vty as V
 import Data.Sequence (Seq)
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
+import AppTypes
 
 -- -------------------------------------------------------------------
 -- Types
@@ -67,7 +68,7 @@ main = do
 
   -- initial Game instance 
   g <- initGame def
-  
+
   let builder = V.mkVty V.defaultConfig
   initialVty <- builder
   void $ customMain initialVty    -- Vty 
@@ -80,12 +81,18 @@ main = do
 -- Handling events
 
 handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
+
 -- call step to continue the game 
 handleEvent g (AppEvent Tick) = do
+  -- perform step
   (g', w) <- liftIO (step g)
-  -- TODO: Handle log
-  -- May need to append in Game
-  continue g'
+
+  -- scroll log viewport to end and add new data if new events occured 
+  if null w && not (g' ^. updateLog)
+    then continue g'
+    else do vScrollToEnd vp1Scroll
+            continue $ g' & logText .~ (g' ^. logText) ++ w
+                          & updateLog .~ False
 
 -- handle turning 
 handleEvent g (VtyEvent (V.EvKey V.KUp []))         = continue $ turn North g
@@ -135,11 +142,18 @@ drawLogger :: Game -> Widget Name
 drawLogger g = pair
   where
      pair = B.borderWithLabel (str "| Logger |") $ vLimit 6 $ hBox
-            [ viewport VP1 Vertical  $ padLeftRight 1  $ 
-              vBox (str <$> ["Line " <> (show i) | i <- [3..50 :: Int]])
+            [ viewport VP1 Vertical  $ padLeftRight 1  $
+              vBox (drawLog g)
             ]
             <+> vBox [ str "\n", B.vBorder ]
             <+> drawGameOver (g ^. dead)
+     drawLog g = map (\x -> applyStyle (fst x) $ txt $ "\x03BB: " `T.append` snd x) logData
+       where logData = g ^. logText
+             applyStyle evt = case evt of
+               LogFoodPlus  -> withAttr greenLogAttr
+               LogFoodMinus -> withAttr redLogAttr
+               LogDead      -> withAttr redLogAttr
+               LogTurn      -> withAttr blueLogAttr
 
 drawGrid :: Game -> Config -> Widget Name
 drawGrid g e = withBorderStyle BS.unicodeBold
@@ -147,7 +161,7 @@ drawGrid g e = withBorderStyle BS.unicodeBold
   $ vBox rows
   where
     h = e ^. height
-    w = e ^. width 
+    w = e ^. width
     rows         = [ hBox $ cellsInRow r | r <- [h-1,h-2..0] ]
     cellsInRow y = [ drawCoord (V2 x y)  | x <- [0..w-1] ]
     drawCoord    = drawCell . cellAt
@@ -175,6 +189,11 @@ theMap = attrMap V.defAttr
   , (foodPAttr, V.red   `on` V.red)
   , (foodMAttr, V.green `on` V.green)
   , (gameOverAttr, fg V.red `V.withStyle` V.bold)
+  
+  -- logging styles
+  , (redLogAttr,   V.brightRed   `on` V.black)
+  , (greenLogAttr, V.brightGreen `on` V.black)
+  , (blueLogAttr,  V.brightBlue  `on` V.black)
   ]
 
 gameOverAttr :: AttrName
@@ -186,5 +205,7 @@ foodPAttr = "foodPAttr"
 emptyAttr = "emptyAttr"
 foodMAttr = "foodMAttr"
 
-
-
+redLogAttr, greenLogAttr, blueLogAttr :: AttrName
+redLogAttr = "redLogAttr"
+greenLogAttr = "greenLogAttr"
+blueLogAttr = "grayLogAttr"

@@ -17,7 +17,9 @@ import Linear.V2 (V2(..), _x, _y)
 -- -------------------------------------------------------------------
 -- Transformer Stack
 
-type MRSWIO a = MaybeT (ReaderT Config (StateT Game (WriterT Text IO))) a
+type LogData = [(LogEvt, Text)]
+
+type MRSWIO a = MaybeT (ReaderT Config (StateT Game (WriterT (LogData) IO))) a
 
 -- -------------------------------------------------------------------
 -- Environment
@@ -51,7 +53,9 @@ data Game = Game
   , _locked      :: Bool           -- ^ lock to disallow duplicate turns between time steps
   , _spawnFoodP  :: Bool
   , _spawnFoodM  :: Bool
-  } 
+  , _logText     :: [(LogEvt, Text)]
+  , _updateLog   :: Bool
+  }
 
 type Coord = V2 Int
 type Snake = Seq Coord
@@ -69,6 +73,7 @@ data Direction
 data LogEvt = LogFoodPlus
             | LogFoodMinus
             | LogDead
+            | LogTurn 
             deriving (Eq, Show)
 
 -- -------------------------------------------------------------------
