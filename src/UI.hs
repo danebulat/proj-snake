@@ -9,19 +9,18 @@ import Data.Maybe (fromMaybe)
 import Data.Default (def)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Snake
 
 import Brick
   ( App(..), AttrMap, BrickEvent(..), EventM, Next, Widget
+  , attrMap, withAttr, emptyWidget, AttrName, on, fg
   , customMain, neverShowCursor
   , continue, halt
   , hLimit, vLimit, vBox, hBox
-  , padRight, padLeft, padTop, padAll, Padding(..)
+  , padRight, padLeft, padTop, padAll, padLeftRight, Padding(..)
   , withBorderStyle
   , str, txt, fill
-  , attrMap, withAttr, emptyWidget, AttrName, on, fg
-  , (<+>), (<=>)
-  , viewport, viewportScroll, ViewportScroll (vScrollToEnd), vScrollBy, padLeftRight
+  , viewport, viewportScroll, ViewportScroll, vScrollToEnd, vScrollBy
+  , (<+>), (<=>)  
   )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
@@ -32,7 +31,9 @@ import qualified Graphics.Vty as V
 import Data.Sequence (Seq)
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
+
 import AppTypes
+import Snake
 
 -- -------------------------------------------------------------------
 -- Types
@@ -64,7 +65,7 @@ main = do
   chan <- newBChan 10
   forkIO $ forever $ do
     writeBChan chan Tick
-    threadDelay 100000 -- decides how fast your game moves
+    threadDelay 100000
 
   -- initial Game instance 
   g <- initGame def
@@ -84,6 +85,7 @@ handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
 
 -- call step to continue the game 
 handleEvent g (AppEvent Tick) = do
+  
   -- perform step
   (g', w) <- liftIO (step g)
 
@@ -103,8 +105,10 @@ handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = vScrollBy vp1Scroll (-1) >
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = vScrollBy vp1Scroll 1 >> continue g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'h') [])) = continue g
+
 -- reset game 
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
+
 -- quit game
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt g
 handleEvent g (VtyEvent (V.EvKey V.KEsc []))        = halt g
@@ -142,8 +146,9 @@ drawLogger :: Game -> Widget Name
 drawLogger g = pair
   where
      pair = B.borderWithLabel (str "| Logger |") $ vLimit 6 $ hBox
-            [ viewport VP1 Vertical  $ padLeftRight 1  $
-              vBox (drawLog g)
+            [ viewport VP1 Vertical
+            $ padLeftRight 1
+            $ vBox (drawLog g)
             ]
             <+> vBox [ str "\n", B.vBorder ]
             <+> drawGameOver (g ^. dead)
@@ -162,8 +167,8 @@ drawGrid g e = withBorderStyle BS.unicodeBold
   where
     h = e ^. height
     w = e ^. width
-    rows         = [ hBox $ cellsInRow r | r <- [h-1,h-2..0] ]
-    cellsInRow y = [ drawCoord (V2 x y)  | x <- [0..w-1] ]
+    rows         = [ hBox $ cellsInRow r | r <- [h-1, h-2 .. 0] ]
+    cellsInRow y = [ drawCoord (V2 x y)  | x <- [0 .. w-1] ]
     drawCoord    = drawCell . cellAt
     cellAt c
       | c `elem` g ^. snake = Snake
@@ -206,6 +211,6 @@ emptyAttr = "emptyAttr"
 foodMAttr = "foodMAttr"
 
 redLogAttr, greenLogAttr, blueLogAttr :: AttrName
-redLogAttr = "redLogAttr"
+redLogAttr   = "redLogAttr"
 greenLogAttr = "greenLogAttr"
-blueLogAttr = "grayLogAttr"
+blueLogAttr  = "blueLogAttr"

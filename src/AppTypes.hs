@@ -19,7 +19,7 @@ import Linear.V2 (V2(..), _x, _y)
 
 type LogData = [(LogEvt, Text)]
 
-type MRSWIO a = MaybeT (ReaderT Config (StateT Game (WriterT (LogData) IO))) a
+type AppM a = MaybeT (ReaderT Config (StateT Game (WriterT (LogData) IO))) a
 
 -- -------------------------------------------------------------------
 -- Environment

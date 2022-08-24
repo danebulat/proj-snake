@@ -44,7 +44,7 @@ step g = do
   return (snd a, w)
 
 -- | Entry point to the monad transformer stack 
-doStep :: MRSWIO ()
+doStep :: AppM ()
 doStep = do
   g <- lift $ lift get
 
@@ -61,7 +61,7 @@ doStep = do
   eatPlus >> eatMinus >> move >> die >> mkFood
 
 -- | Handle the possibility of game over 
-die :: MRSWIO ()
+die :: AppM ()
 die = do
   -- dead if the snake's head is over another snake coord
   s <- lift $ lift get
@@ -73,7 +73,7 @@ die = do
        else MaybeT $ pure (Just ())
 
 -- | Move snake along in a marquee fashion
-move :: MRSWIO ()
+move :: AppM ()
 move = do
   n <- nextHead
   g <- lift $ lift get
@@ -90,14 +90,14 @@ move = do
   where truncLen g = S.length (g ^. snake) - 1
 
 -- | Handle generating new food coordinates
-mkFood :: MRSWIO ()
+mkFood :: AppM ()
 mkFood = do
   s <- lift $ lift get
   if s ^. spawnFoodP then mkFoodP else MaybeT $ pure (Just ())
   if s ^. spawnFoodM then mkFoodM else MaybeT $ pure (Just ())
 
 -- | Handle snake head landing on food 
-eatPlus :: MRSWIO ()
+eatPlus :: AppM ()
 eatPlus = do
   g <- lift $ lift get
   let (h :<| _) = g ^. snake 
@@ -110,7 +110,7 @@ eatPlus = do
     else MaybeT $ pure (Just ())
 
 -- | Calculate a new food coordinate 
-mkFoodP :: MRSWIO ()
+mkFoodP :: AppM ()
 mkFoodP = do
   e <- lift ask
   s <- lift $ lift get
@@ -124,7 +124,7 @@ mkFoodP = do
                                          & spawnFoodP .~ False)
 
 -- -------------------------------------------------------------------
-eatMinus :: MRSWIO ()
+eatMinus :: AppM ()
 eatMinus = do
   g <- lift $ lift get
   nxt <- nextHead
@@ -139,7 +139,7 @@ eatMinus = do
     initSnake cs =
       if S.length cs <= 1 then cs else S.deleteAt (S.length cs - 1) cs
 
-mkFoodM :: MRSWIO ()
+mkFoodM :: AppM ()
 mkFoodM = do
   s <- lift $ lift get
   e <- lift ask
@@ -154,7 +154,7 @@ mkFoodM = do
 -- -----------------------------------------------------------------
 
 -- | Get next head position of the snake (called in move, eat* functions)
-nextHead :: MRSWIO (V2 Int)
+nextHead :: AppM (V2 Int)
 nextHead = do
   r <- lift ask
   s <- lift $ lift get
@@ -172,26 +172,22 @@ nextHead = do
 turn :: Direction -> Game -> Game
 turn d g = if g ^. locked
   then g  -- return Game if game is locked (do not modify state)
-  else g & dir %~ turnDir d
-         & paused .~ False
-         & locked .~ True
+  else g & dir       %~ turnDir d
+         & paused    .~ False
+         & locked    .~ True
          & updateLog .~ turned
-         & if turned  -- TODO: use (%~)
-             then logText .~ ((g ^. logText) ++ [getTurnText d])
-             else logText .~ g ^. logText
+         & logText   .~ if turned then (g ^. logText) ++ mkLog d else g ^. logText
   where
-    curDir  = g ^. dir
-    nextDir = turnDir d curDir
-    turned  = curDir /= nextDir
-    getTurnText d = (LogTurn, logt LogTurn `T.append` T.pack (show d))
+    cur     = g ^. dir
+    nxt     = turnDir d cur
+    turned  = cur /= nxt
+    mkLog d = [(LogTurn, logt LogTurn `T.append` T.pack (show d))]
 
+-- | Return a possible new direction (rakes [n]ext and [c]urrent)
 turnDir :: Direction -> Direction -> Direction
 turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
-              -- turn North or South if current dir is East of West 
             | c `elem` [East, West] && n `elem` [North, South] = n
-            -- turn East or West if current dir is Noth or South
             | otherwise = c
-            -- no change in direction
 
 -- | Generate a random grid coordinate
 --
@@ -232,9 +228,6 @@ initGame r = do
         , _updateLog  = False
         , _makeLonger = False
         }
-
-  --r <- runWriterT (runStateT (runReaderT (runMaybeT mkFood) def) g)
-  --return $ snd . fst $ r
 
   return g
 
