@@ -78,7 +78,7 @@ move = do
   n <- nextHead
   g <- lift $ lift get
 
-  -- keep snake length the same if its to be made longer 
+  -- keep snake length the same if it's marked to be made longer 
   let cs = if g ^. makeLonger 
            then n <| g ^. snake
            else n <| S.deleteAt (truncLen g) (g ^. snake)
@@ -104,6 +104,7 @@ eatPlus = do
   if h == g ^. foodP
     then do
       lift $ lift $ modify (\s -> s & score +~ 10
+                                    & foodPCount +~ 1
                                     & makeLonger .~ True
                                     & spawnFoodP .~ True)
       lift $ lift $ lift $ tell [(LogFoodPlus, logt LogFoodPlus)]
@@ -132,10 +133,15 @@ eatMinus = do
     then do
       lift $ lift $ modify (\s -> s & score +~ (-30)
                                     & snake .~ initSnake (s ^. snake)
-                                    & spawnFoodM .~ True)
+                                    & spawnFoodM .~ True
+                                    & (if snakeLen g /= 1
+                                       then foodMCount +~ 1
+                                       else foodMCount .~ g ^. foodMCount))
+        
       lift $ lift $ lift $ tell [(LogFoodMinus, logt LogFoodMinus)]
     else MaybeT $ pure (Just ())
   where
+    snakeLen g = S.length $ g ^. snake
     initSnake cs =
       if S.length cs <= 1 then cs else S.deleteAt (S.length cs - 1) cs
 
@@ -224,9 +230,11 @@ initGame r = do
         , _locked     = False
         , _spawnFoodP = False
         , _spawnFoodM = False
+        , _makeLonger = False
         , _logText    = []
         , _updateLog  = False
-        , _makeLonger = False
+        , _foodPCount = 0
+        , _foodMCount = 0
         }
 
   return g

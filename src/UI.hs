@@ -20,7 +20,7 @@ import Brick
   , withBorderStyle
   , str, txt, fill
   , viewport, viewportScroll, ViewportScroll, vScrollToEnd, vScrollBy
-  , (<+>), (<=>)  
+  , (<+>), (<=>)
   )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
@@ -48,6 +48,10 @@ data Cell = Snake | Food | DoubleFood | Empty
 
 vp1Scroll :: ViewportScroll Name
 vp1Scroll = viewportScroll VP1
+
+-- shortcut to append Text 
+(<^>) :: Text -> Text -> Text
+(<^>) = T.append 
 
 -- -------------------------------------------------------------------
 -- App definition
@@ -85,7 +89,7 @@ handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
 
 -- call step to continue the game 
 handleEvent g (AppEvent Tick) = do
-  
+
   -- perform step
   (g', w) <- liftIO (step g)
 
@@ -133,8 +137,16 @@ drawStats g =
        $ padAll 1
        $ vLimit 1
        $ C.center
-       $ str $ "Score: " <> show (g ^. score)
+       $ sc
+       <+> withAttr snakeAttr (str "  ")
+       <+> txt (" " <^> snakeLength g <^> "  ")
+       <+> withAttr foodPAttr (str "  ") <+> cp
+       <+> withAttr foodMAttr (str "  ") <+> cm
        ]
+  where snakeLength g = T.pack . show $ 1 + (g ^. foodPCount) - (g ^. foodMCount)
+        sc = txt ("Score " <^> (T.pack . show $ g  ^. score)       <^> "  ")
+        cp = txt (" "      <^> (T.pack . show $ (g ^. foodPCount)) <^> "  ")
+        cm = txt (" "      <^> (T.pack . show $ (g ^. foodMCount)) <^> "  ")
 
 drawGameOver :: Bool -> Widget Name
 drawGameOver dead =
@@ -152,7 +164,7 @@ drawLogger g = pair
             ]
             <+> vBox [ str "\n", B.vBorder ]
             <+> drawGameOver (g ^. dead)
-     drawLog g = map (\x -> applyStyle (fst x) $ txt $ "\x03BB: " `T.append` snd x) logData
+     drawLog g = map (\x -> applyStyle (fst x) $ txt $ "\x03BB: " <^> snd x) logData
        where logData = g ^. logText
              applyStyle evt = case evt of
                LogFoodPlus  -> withAttr greenLogAttr
@@ -193,8 +205,9 @@ theMap = attrMap V.defAttr
   [ (snakeAttr, V.blue  `on` V.blue)
   , (foodPAttr, V.red   `on` V.red)
   , (foodMAttr, V.green `on` V.green)
-  , (gameOverAttr, fg V.red `V.withStyle` V.bold)
-  
+  , (gameOverAttr,  fg V.red   `V.withStyle` V.bold)
+  , (highlightAttr, fg V.brightWhite `V.withStyle` V.bold)
+
   -- logging styles
   , (redLogAttr,   V.brightRed   `on` V.black)
   , (greenLogAttr, V.brightGreen `on` V.black)
@@ -204,11 +217,12 @@ theMap = attrMap V.defAttr
 gameOverAttr :: AttrName
 gameOverAttr = "gameOver"
 
-snakeAttr, foodPAttr, foodMAttr, emptyAttr :: AttrName
-snakeAttr = "snakeAttr"
-foodPAttr = "foodPAttr"
-emptyAttr = "emptyAttr"
-foodMAttr = "foodMAttr"
+snakeAttr, foodPAttr, foodMAttr, emptyAttr, highlightAttr :: AttrName
+snakeAttr     = "snakeAttr"
+foodPAttr     = "foodPAttr"
+emptyAttr     = "emptyAttr"
+foodMAttr     = "foodMAttr"
+highlightAttr = "highlightAttr"
 
 redLogAttr, greenLogAttr, blueLogAttr :: AttrName
 redLogAttr   = "redLogAttr"
