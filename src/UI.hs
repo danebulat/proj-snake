@@ -18,7 +18,7 @@ import Brick
   , hLimit, vLimit, vBox, hBox
   , padRight, padLeft, padTop, padAll, padLeftRight, Padding(..)
   , withBorderStyle
-  , str, txt, fill
+  , txt, fill
   , viewport, viewportScroll, ViewportScroll, vScrollToEnd, vScrollBy
   , (<+>), (<=>)
   )
@@ -101,14 +101,12 @@ handleEvent g (AppEvent Tick) = do
                           & updateLog .~ False
 
 -- handle turning 
-handleEvent g (VtyEvent (V.EvKey V.KUp []))         = continue $ turn North g
-handleEvent g (VtyEvent (V.EvKey V.KDown []))       = continue $ turn South g
+handleEvent g (VtyEvent (V.EvKey V.KUp    []))      = continue $ turn North g
+handleEvent g (VtyEvent (V.EvKey V.KDown  []))      = continue $ turn South g
 handleEvent g (VtyEvent (V.EvKey V.KRight []))      = continue $ turn East g
-handleEvent g (VtyEvent (V.EvKey V.KLeft []))       = continue $ turn West g
+handleEvent g (VtyEvent (V.EvKey V.KLeft  []))      = continue $ turn West g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = vScrollBy vp1Scroll (-1) >> continue g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = vScrollBy vp1Scroll 1 >> continue g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'l') [])) = continue g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'h') [])) = continue g
 
 -- reset game 
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
@@ -133,15 +131,15 @@ drawUI g =
 drawStats :: Game -> Widget Name
 drawStats g =
   hBox [ withBorderStyle BS.unicode
-       $ B.borderWithLabel (str "| Snake |")
+       $ B.borderWithLabel (txt "| Snake |")
        $ padAll 1
        $ vLimit 1
        $ C.center
        $ sc
-       <+> withAttr snakeAttr (str "  ")
+       <+> withAttr snakeAttr (txt "  ")
        <+> txt (" " <^> snakeLength g <^> "  ")
-       <+> withAttr foodPAttr (str "  ") <+> cp
-       <+> withAttr foodMAttr (str "  ") <+> cm
+       <+> withAttr foodPAttr (txt "  ") <+> cp
+       <+> withAttr foodMAttr (txt "  ") <+> cm
        ]
   where snakeLength g = T.pack . show $ 1 + (g ^. foodPCount) - (g ^. foodMCount)
         sc = txt ("Score " <^> (T.pack . show $ g  ^. score)       <^> "  ")
@@ -151,26 +149,32 @@ drawStats g =
 drawGameOver :: Bool -> Widget Name
 drawGameOver dead =
   if dead
-     then withAttr gameOverAttr $ C.center $ str "GAME OVER"
-     else C.center $ str "Playing..."
+     then withAttr gameOverAttr $ C.center $ txt "GAME OVER"
+     else C.center $ txt "Playing..."
 
 drawLogger :: Game -> Widget Name
 drawLogger g = pair
   where
-     pair = B.borderWithLabel (str "| Logger |") $ vLimit 6 $ hBox
+     pair = B.borderWithLabel (txt "| Logger |") $ vLimit 6 $ hBox
             [ viewport VP1 Vertical
             $ padLeftRight 1
             $ vBox (drawLog g)
             ]
-            <+> vBox [ str "\n", B.vBorder ]
-            <+> drawGameOver (g ^. dead)
-     drawLog g = map (\x -> applyStyle (fst x) $ txt $ "\x03BB: " <^> snd x) logData
+            <+> vBox [ txt "\n", B.vBorder ]
+            <+> drawUsage
+     drawLog g = map (\x -> txt "\x03BB: " <+> (applyStyle $ fst x) (txt $ snd x)) logData
        where logData = g ^. logText
              applyStyle evt = case evt of
                LogFoodPlus  -> withAttr greenLogAttr
                LogFoodMinus -> withAttr redLogAttr
                LogDead      -> withAttr redLogAttr
                LogTurn      -> withAttr blueLogAttr
+
+drawUsage = C.center
+          $ txt "<arrows>   Move snake\n\
+                \Esc, q     Quit\n\
+                \r          Reset game\n\
+                \k, j       Scroll logger"
 
 drawGrid :: Game -> Config -> Widget Name
 drawGrid g e = withBorderStyle BS.unicodeBold
@@ -195,7 +199,7 @@ drawCell DoubleFood = withAttr foodMAttr cellW
 drawCell Empty      = withAttr emptyAttr cellW
 
 cellW :: Widget Name
-cellW = str "  "
+cellW = txt "  "
 
 -- -------------------------------------------------------------------
 -- Attributes

@@ -43,14 +43,14 @@ instance Default Config where
 -- State 
 
 data Game = Game
-  { _snake       :: Snake          -- ^ snake as a sequence of points in V2
-  , _dir         :: Direction      -- ^ direction
-  , _foodP       :: Coord          -- ^ location of the food
-  , _foodM       :: Coord          -- ^ location of the double food
-  , _dead        :: Bool           -- ^ game over flag
-  , _paused      :: Bool           -- ^ paused flag
-  , _score       :: Int            -- ^ score
-  , _locked      :: Bool           -- ^ lock to disallow duplicate turns between time steps
+  { _snake       :: Snake
+  , _dir         :: Direction
+  , _foodP       :: Coord
+  , _foodM       :: Coord
+  , _dead        :: Bool   -- ^ game over flag
+  , _paused      :: Bool   -- ^ paused flag
+  , _score       :: Int    -- ^ score
+  , _locked      :: Bool   -- ^ lock to disallow duplicate turns between time steps
   , _spawnFoodP  :: Bool
   , _spawnFoodM  :: Bool
   , _makeLonger  :: Bool
