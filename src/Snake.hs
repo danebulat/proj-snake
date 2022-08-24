@@ -96,7 +96,7 @@ mkFood = do
   if s ^. spawnFoodP then mkFoodP else MaybeT $ pure (Just ())
   if s ^. spawnFoodM then mkFoodM else MaybeT $ pure (Just ())
 
--- | Handle snake head landing on food 
+-- | Handle snake head landing on food
 eatPlus :: AppM ()
 eatPlus = do
   g <- lift $ lift get
@@ -106,7 +106,8 @@ eatPlus = do
       lift $ lift $ modify (\s -> s & score +~ 10
                                     & foodPCount +~ 1
                                     & makeLonger .~ True
-                                    & spawnFoodP .~ True)
+                                    & spawnFoodP .~ True
+                                    & spawnFoodM .~ True)
       lift $ lift $ lift $ tell [(LogFoodPlus, logt LogFoodPlus)]
     else MaybeT $ pure (Just ())
 
@@ -134,9 +135,8 @@ eatMinus = do
       lift $ lift $ modify (\s -> s & score +~ (-30)
                                     & snake .~ initSnake (s ^. snake)
                                     & spawnFoodM .~ True
-                                    & (if snakeLen g /= 1
-                                       then foodMCount +~ 1
-                                       else foodMCount .~ g ^. foodMCount))
+                                    & spawnFoodP .~ True
+                                    & foodMCount +~ 1)
         
       lift $ lift $ lift $ tell [(LogFoodMinus, logt LogFoodMinus)]
     else MaybeT $ pure (Just ())

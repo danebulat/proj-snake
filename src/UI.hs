@@ -87,7 +87,7 @@ main = do
 
 handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
 
--- call step to continue the game 
+-- call step to continue the game
 handleEvent g (AppEvent Tick) = do
 
   -- perform step
@@ -108,7 +108,7 @@ handleEvent g (VtyEvent (V.EvKey V.KLeft  []))      = continue $ turn West g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = vScrollBy vp1Scroll (-1) >> continue g
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = vScrollBy vp1Scroll 1 >> continue g
 
--- reset game 
+-- reset game
 handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
 
 -- quit game
@@ -141,7 +141,7 @@ drawStats g =
        <+> withAttr foodPAttr (txt "  ") <+> cp
        <+> withAttr foodMAttr (txt "  ") <+> cm
        ]
-  where snakeLength g = T.pack . show $ 1 + (g ^. foodPCount) - (g ^. foodMCount)
+  where snakeLength g = T.pack . show $ S.length (g ^. snake)
         sc = txt ("Score " <^> (T.pack . show $ g  ^. score)       <^> "  ")
         cp = txt (" "      <^> (T.pack . show $ (g ^. foodPCount)) <^> "  ")
         cm = txt (" "      <^> (T.pack . show $ (g ^. foodMCount)) <^> "  ")
@@ -207,9 +207,9 @@ cellW = txt "  "
 theMap :: AttrMap
 theMap = attrMap V.defAttr
   [ (snakeAttr, V.blue  `on` V.blue)
-  , (foodPAttr, V.red   `on` V.red)
-  , (foodMAttr, V.green `on` V.green)
-  , (gameOverAttr,  fg V.red   `V.withStyle` V.bold)
+  , (foodPAttr, V.green `on` V.green)
+  , (foodMAttr, V.red   `on` V.red)
+  , (gameOverAttr,  fg V.red `V.withStyle` V.bold)
   , (highlightAttr, fg V.brightWhite `V.withStyle` V.bold)
 
   -- logging styles
