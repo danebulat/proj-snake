@@ -56,7 +56,6 @@ data Game = Game
   , _makeLonger  :: Bool
   , _logText     :: [(LogEvt, Text)]
   , _updateLog   :: Bool
-
   , _foodPCount  :: Int
   , _foodMCount  :: Int
   }
