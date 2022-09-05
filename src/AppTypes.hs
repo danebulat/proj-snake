@@ -8,7 +8,7 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Writer
-import Control.Lens hiding ((<|), (|>), (:>), (:<))
+import Control.Lens.TH (makeLenses)
 
 import Data.Sequence (Seq(..))
 import Data.Text (Text)
@@ -41,6 +41,9 @@ instance Default Config where
 
 -- -------------------------------------------------------------------
 -- State 
+
+newtype AppState = AppState
+  { _game :: Game }
 
 data Game = Game
   { _snake       :: Snake
@@ -84,4 +87,4 @@ data LogEvt = LogFoodPlus
 
 makeLenses ''Game
 makeLenses ''Config
-
+makeLenses ''AppState

@@ -15,7 +15,7 @@ import Data.Default
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Control.Lens hiding ((<|), (|>), (:>), (:<))
+import Lens.Micro hiding ((<|), (|>),  (:>), (:<))
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.State

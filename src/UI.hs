@@ -4,24 +4,12 @@ module UI where
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
-import Control.Lens ((^.), (.~), (&))
 import Data.Maybe (fromMaybe)
 import Data.Default (def)
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Brick
-  ( App(..), AttrMap, BrickEvent(..), EventM, Next, Widget
-  , attrMap, withAttr, emptyWidget, AttrName, on, fg
-  , customMain, neverShowCursor
-  , continue, halt
-  , hLimit, vLimit, vBox, hBox
-  , padRight, padLeft, padTop, padAll, padLeftRight, Padding(..)
-  , withBorderStyle
-  , txt, fill
-  , viewport, viewportScroll, ViewportScroll, vScrollToEnd, vScrollBy
-  , (<+>), (<=>)
-  )
 import Brick.BChan (newBChan, writeBChan)
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as BS
@@ -31,9 +19,12 @@ import qualified Graphics.Vty as V
 import Data.Sequence (Seq)
 import qualified Data.Sequence as S
 import Linear.V2 (V2(..))
+import Lens.Micro
+import Lens.Micro.Mtl ((.=), (%=), use)
 
 import AppTypes
 import Snake
+import Graphics.Vty (Event(EvKey))
 
 -- -------------------------------------------------------------------
 -- Types
@@ -56,11 +47,11 @@ vp1Scroll = viewportScroll VP1
 -- -------------------------------------------------------------------
 -- App definition
 
-app :: App Game Tick Name
+app :: App AppState Tick Name
 app = App { appDraw         = drawUI
           , appChooseCursor = neverShowCursor
           , appHandleEvent  = handleEvent
-          , appStartEvent   = return
+          , appStartEvent   = return ()
           , appAttrMap      = const theMap
           }
 
@@ -80,53 +71,61 @@ main = do
                     builder       -- IO Vty 
                     (Just chan)   -- Maybe (BChan e)
                     app           -- App s e n
-                    g             -- s
+                    (AppState g)  -- s
 
 -- -------------------------------------------------------------------
 -- Handling events
 
-handleEvent :: Game -> BrickEvent Name Tick -> EventM Name (Next Game)
+handleEvent :: BrickEvent Name Tick -> EventM Name AppState ()
+handleEvent e =
+  case e of
+    AppEvent Tick -> do
+      g <- use game
+      
+      -- perform step
+      (g', w) <- liftIO (step g)
 
--- call step to continue the game
-handleEvent g (AppEvent Tick) = do
+      if null w && not (g' ^. updateLog)
+        then game .= g'
+        else do 
+          vScrollToEnd vp1Scroll
+          --game .= g'
+          game %= \_ -> g' & logText .~ (g' ^. logText) ++ w
+                           & updateLog .~ False
 
-  -- perform step
-  (g', w) <- liftIO (step g)
+    -- turn snake
+    VtyEvent (V.EvKey V.KUp [])    -> game %= turn North
+    VtyEvent (V.EvKey V.KDown [])  -> game %= turn South
+    VtyEvent (V.EvKey V.KRight []) -> game %= turn East
+    VtyEvent (V.EvKey V.KLeft [])  -> game %= turn West
 
-  -- scroll log viewport to end and add new data if new events occured 
-  if null w && not (g' ^. updateLog)
-    then continue g'
-    else do vScrollToEnd vp1Scroll
-            continue $ g' & logText .~ (g' ^. logText) ++ w
-                          & updateLog .~ False
+    -- scroll viewport
+    VtyEvent (V.EvKey (V.KChar 'k') []) -> vScrollBy vp1Scroll (-1)
+    VtyEvent (V.EvKey (V.KChar 'j') []) -> vScrollBy vp1Scroll 1
 
--- handle turning 
-handleEvent g (VtyEvent (V.EvKey V.KUp    []))      = continue $ turn North g
-handleEvent g (VtyEvent (V.EvKey V.KDown  []))      = continue $ turn South g
-handleEvent g (VtyEvent (V.EvKey V.KRight []))      = continue $ turn East g
-handleEvent g (VtyEvent (V.EvKey V.KLeft  []))      = continue $ turn West g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'k') [])) = vScrollBy vp1Scroll (-1) >> continue g
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'j') [])) = vScrollBy vp1Scroll 1 >> continue g
+    -- reset
+    VtyEvent (V.EvKey (V.KChar 'r') []) -> do
+      g <- liftIO $ initGame def
+      game .= g
 
--- reset game
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'r') [])) = liftIO (initGame def) >>= continue
+    -- exit
+    VtyEvent (V.EvKey (V.KChar 'q') [])    -> halt
+    VtyEvent (V.EvKey V.KEsc []) -> halt
 
--- quit game
-handleEvent g (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt g
-handleEvent g (VtyEvent (V.EvKey V.KEsc []))        = halt g
-handleEvent g _                                     = continue g
+    _ -> return ()
 
 -- -------------------------------------------------------------------
 -- Drawing
 
-drawUI :: Game -> [Widget Name]
-drawUI g =
+drawUI :: AppState -> [Widget Name]
+drawUI st =
   [ vBox
     [ drawStats g
       <=> vBox [ C.center $  drawGrid g def]
       <=> drawLogger g
     ]
   ]
+  where g = st^.game
 
 drawStats :: Game -> Widget Name
 drawStats g =
@@ -136,10 +135,10 @@ drawStats g =
        $ vLimit 1
        $ C.center
        $ sc
-       <+> withAttr snakeAttr (txt "  ")
+       <+> withAttr (attrName "snakeAttr") (txt "  ")
        <+> txt (" " <^> snakeLength g <^> "  ")
-       <+> withAttr foodPAttr (txt "  ") <+> cp
-       <+> withAttr foodMAttr (txt "  ") <+> cm
+       <+> withAttr (attrName "foodPAttr") (txt "  ") <+> cp
+       <+> withAttr (attrName "foodMAttr") (txt "  ") <+> cm
        ]
   where snakeLength g = T.pack . show $ S.length (g ^. snake)
         sc = txt ("Score " <^> (T.pack . show $ g  ^. score)       <^> "  ")
@@ -149,7 +148,7 @@ drawStats g =
 drawGameOver :: Bool -> Widget Name
 drawGameOver dead =
   if dead
-     then withAttr gameOverAttr $ C.center $ txt "GAME OVER"
+     then withAttr (attrName "gameOver") $ C.center $ txt "GAME OVER"
      else C.center $ txt "Playing..."
 
 drawLogger :: Game -> Widget Name
@@ -165,10 +164,10 @@ drawLogger g = pair
      drawLog g = map (\x -> txt "\x03BB: " <+> (applyStyle $ fst x) (txt $ snd x)) logData
        where logData = g ^. logText
              applyStyle evt = case evt of
-               LogFoodPlus  -> withAttr greenLogAttr
-               LogFoodMinus -> withAttr redLogAttr
-               LogDead      -> withAttr redLogAttr
-               LogTurn      -> withAttr blueLogAttr
+               LogFoodPlus  -> withDefAttr (attrName "greenLogAttr")
+               LogFoodMinus -> withDefAttr (attrName "redLogAttr")
+               LogDead      -> withDefAttr (attrName "redLogAttr")
+               LogTurn      -> withDefAttr (attrName "blueLogAttr")
 
 drawUsage = C.center
           $ txt "<arrows>   Move snake\n\
@@ -193,10 +192,10 @@ drawGrid g e = withBorderStyle BS.unicodeBold
       | otherwise           = Empty
 
 drawCell :: Cell -> Widget Name
-drawCell Snake      = withAttr snakeAttr cellW
-drawCell Food       = withAttr foodPAttr cellW
-drawCell DoubleFood = withAttr foodMAttr cellW
-drawCell Empty      = withAttr emptyAttr cellW
+drawCell Snake      = withDefAttr (attrName "snakeAttr") cellW
+drawCell Food       = withDefAttr (attrName "foodPAttr") cellW
+drawCell DoubleFood = withAttr (attrName "foodMAttr") cellW
+drawCell Empty      = cellW
 
 cellW :: Widget Name
 cellW = txt "  "
@@ -206,29 +205,14 @@ cellW = txt "  "
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (snakeAttr, V.blue  `on` V.blue)
-  , (foodPAttr, V.green `on` V.green)
-  , (foodMAttr, V.red   `on` V.red)
-  , (gameOverAttr,  fg V.red `V.withStyle` V.bold)
-  , (highlightAttr, fg V.brightWhite `V.withStyle` V.bold)
+  [ (attrName "snakeAttr",     V.blue  `on` V.blue)
+  , (attrName "foodPAttr",     V.green `on` V.green)
+  , (attrName "foodMAttr",     V.red   `on` V.red)
+  , (attrName "gameOver",      fg V.red `V.withStyle` V.bold)
+  , (attrName "highlightAttr", fg V.brightWhite `V.withStyle` V.bold)
 
   -- logging styles
-  , (redLogAttr,   V.brightRed   `on` V.black)
-  , (greenLogAttr, V.brightGreen `on` V.black)
-  , (blueLogAttr,  V.brightBlue  `on` V.black)
+  , (attrName "redLogAttr",   V.brightRed   `on` V.black)
+  , (attrName "greenLogAttr", V.brightGreen `on` V.black)
+  , (attrName "blueLogAttr",  V.brightBlue  `on` V.black)
   ]
-
-gameOverAttr :: AttrName
-gameOverAttr = "gameOver"
-
-snakeAttr, foodPAttr, foodMAttr, emptyAttr, highlightAttr :: AttrName
-snakeAttr     = "snakeAttr"
-foodPAttr     = "foodPAttr"
-emptyAttr     = "emptyAttr"
-foodMAttr     = "foodMAttr"
-highlightAttr = "highlightAttr"
-
-redLogAttr, greenLogAttr, blueLogAttr :: AttrName
-redLogAttr   = "redLogAttr"
-greenLogAttr = "greenLogAttr"
-blueLogAttr  = "blueLogAttr"

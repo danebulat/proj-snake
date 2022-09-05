@@ -27,14 +27,16 @@ executable proj-snake
     ghc-options:      -threaded -rtsopts -with-rtsopts=-N
     other-modules:    Snake
                     , UI
-                    , AppTypes 
+                    , AppTypes
     other-extensions:
     build-depends:    base ^>=4.14.3.0
-                    , brick
+                    , brick == 1.1.*
                     , containers
                     , data-default
                     , linear
                     , lens
+                    , microlens
+                    , microlens-mtl
                     , random
                     , text
                     , transformers
