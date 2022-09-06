@@ -212,7 +212,7 @@ theMap = attrMap V.defAttr
   , (attrName "highlightAttr", fg V.brightWhite `V.withStyle` V.bold)
 
   -- logging styles
-  , (attrName "redLogAttr",   V.brightRed   `on` V.black)
-  , (attrName "greenLogAttr", V.brightGreen `on` V.black)
-  , (attrName "blueLogAttr",  V.brightBlue  `on` V.black)
+  , (attrName "redLogAttr",   fg V.brightRed)
+  , (attrName "greenLogAttr", fg V.brightGreen)
+  , (attrName "blueLogAttr",  fg V.brightBlue)
   ]
