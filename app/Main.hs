@@ -1,5 +1,6 @@
-module Main
-  ( main
-  ) where
+module Main where
 
-import UI (main)
+import qualified UI
+
+main :: IO ()
+main = UI.main

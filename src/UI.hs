@@ -5,7 +5,6 @@ module UI where
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (threadDelay, forkIO)
-import Data.Maybe (fromMaybe)
 import Data.Default (def)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -24,26 +23,9 @@ import Lens.Micro
 import Lens.Micro.Mtl ((.=), (%=), use)
 
 import AppTypes
+import UITypes
 import Snake
 import Graphics.Vty (Event(EvKey))
-
--- -------------------------------------------------------------------
--- Types
-
--- | Ticks custom event 
-data Tick = Tick
-
--- | Named resources
-data Name = VP1 deriving (Ord, Show, Eq)
-
-data Cell = Snake | Food | DoubleFood | Empty
-
-vp1Scroll :: ViewportScroll Name
-vp1Scroll = viewportScroll VP1
-
--- shortcut to append Text 
-(<^>) :: Text -> Text -> Text
-(<^>) = T.append 
 
 -- -------------------------------------------------------------------
 -- App definition
@@ -114,6 +96,9 @@ handleEvent e =
     VtyEvent (V.EvKey V.KEsc []) -> halt
 
     _ -> return ()
+
+vp1Scroll :: ViewportScroll Name
+vp1Scroll = viewportScroll VP1
 
 -- -------------------------------------------------------------------
 -- Drawing
@@ -217,3 +202,7 @@ theMap = attrMap V.defAttr
   , (attrName "greenLogAttr", fg V.brightGreen)
   , (attrName "blueLogAttr",  fg V.brightBlue)
   ]
+
+-- shortcut to append Text 
+(<^>) :: Text -> Text -> Text
+(<^>) = T.append 
