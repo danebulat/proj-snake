@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module UI where
 
 import Control.Monad (forever, void)

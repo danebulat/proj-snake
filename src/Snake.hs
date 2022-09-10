@@ -5,6 +5,7 @@ module Snake
   ( initGame
   , step
   , turn
+  , turnDir
   , Config (..) , Direction(..), Game(..)
   , dead, foodP, foodM, score, snake
   , height, width
@@ -125,7 +126,6 @@ mkFoodP = do
     else lift $ lift $ modify (\s' -> s' & foodP .~ V2 x y
                                          & spawnFoodP .~ False)
 
--- -------------------------------------------------------------------
 eatMinus :: AppM ()
 eatMinus = do
   g <- lift $ lift get
@@ -157,7 +157,6 @@ mkFoodM = do
     then mkFoodM
     else lift $ lift $ modify (\s' -> s' & foodM .~ V2 x y
                                          & spawnFoodM .~ False)
--- -----------------------------------------------------------------
 
 -- | Get next head position of the snake (called in move, eat* functions)
 nextHead :: AppM (V2 Int)
@@ -189,7 +188,7 @@ turn d g = if g ^. locked
     turned  = cur /= nxt
     mkLog d = [(LogTurn, logt LogTurn `T.append` T.pack (show d))]
 
--- | Return a possible new direction (rakes [n]ext and [c]urrent)
+-- | Return a possible new direction (takes [n]ext and [c]urrent)
 turnDir :: Direction -> Direction -> Direction
 turnDir n c | c `elem` [North, South] && n `elem` [East, West] = n
             | c `elem` [East, West] && n `elem` [North, South] = n
